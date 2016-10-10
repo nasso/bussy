@@ -361,6 +361,15 @@ function GameObject(opts) {
 	
 	this.sprite = opts.sprite || null;
 	this.shape = opts.shape || null;
+	
+	this.shapeColor = opts.shapeColor || "white";
+	this.shapeStrokeColor = opts.shapeStrokeColor || "black";
+	
+	this.drawBehindParent = isNullOrUndef(opts.drawBehindParent) ? false : opts.drawBehindParent;
+	
+	this.shapeOutline = isNullOrUndef(opts.shapeOutline) ? false : opts.shapeOutline;
+	this.shapeFill = isNullOrUndef(opts.shapeFill) ? true : opts.shapeFill;
+	this.shapeLineWidth = isNullOrUndef(opts.shapeLineWidth) ? 0.05 : opts.shapeLineWidth;
 }
 
 function Vehicle(opts) {
@@ -368,37 +377,57 @@ function Vehicle(opts) {
 	
 	GameObject.call(this, opts);
 	
-	this.frtWheelDst = isNullOrUndef(opts.frtWheelDst) ? 3.6 : opts.frtWheelDst;
-	this.bckWheelDst = isNullOrUndef(opts.bckWheelDst) ? 3.6 : opts.bckWheelDst;
+	this.frtWheelDst = isNullOrUndef(opts.frtWheelDst) ? 3.7 : opts.frtWheelDst;
+	this.bckWheelDst = isNullOrUndef(opts.bckWheelDst) ? 3.7 : opts.bckWheelDst;
 	this.length = isNullOrUndef(opts.length) ? 12 : opts.length;
 	this.width = isNullOrUndef(opts.width) ? 2.5 : opts.width;
 	
-	this.wheelConeAngle = isNullOrUndef(opts.wheelConeAngle) ? 75 : opts.wheelConeAngle;
-	this.wheelOrientSpeed = isNullOrUndef(opts.wheelOrientSpeed) ? 0.1 : opts.wheelOrientSpeed;
+	this.wheelConeAngle = isNullOrUndef(opts.wheelConeAngle) ? 80 : opts.wheelConeAngle;
+	this.wheelOrientSpeed = isNullOrUndef(opts.wheelOrientSpeed) ? 0.05 : opts.wheelOrientSpeed;
 	this.wheelOrientation = isNullOrUndef(opts.wheelOrientation) ? 0 : opts.wheelOrientation;
 	this.engineForce = isNullOrUndef(opts.engineForce) ? 0 : opts.engineForce;
 	this.enginePing = isNullOrUndef(opts.enginePing) ? 0.9 : opts.enginePing;
-	this.enginePower = isNullOrUndef(opts.enginePower) ? 1 : opts.enginePower;
+	
+	this.brakeForce = isNullOrUndef(opts.brakeForce) ? 0.9 : opts.brakeForce;
+	
+	this.acceleration = isNullOrUndef(opts.acceleration) ? 1/700 : opts.acceleration;
+	this.speed = 0;
+	this.maxSpeed = isNullOrUndef(opts.maxSpeed) ? 20 : opts.maxSpeed;
 	
 	this.shape = new NATH.Rect2(this.length, this.width);
+	this.shapeColor = "#ddd";
+	
+	this.shapeOutline = true;
 	
 	var wheelShape = new NATH.Rect2(0.9, 0.4);
 	
 	this.leftBackWheelObj = new GameObject({
 		shape: wheelShape,
-		position: [-this.frtWheelDst, this.width/2]
+		shapeColor: "#111",
+		position: [-this.frtWheelDst, this.width/2],
+		
+		drawBehindParent: true
 	});
 	this.leftFrontWheelObj = new GameObject({
 		shape: wheelShape,
-		position: [this.bckWheelDst, this.width/2]
+		shapeColor: "#111",
+		position: [this.bckWheelDst, this.width/2],
+		
+		drawBehindParent: true
 	});
 	this.rightBackWheelObj = new GameObject({
 		shape: wheelShape,
-		position: [-this.frtWheelDst, -this.width/2]
+		shapeColor: "#111",
+		position: [-this.frtWheelDst, -this.width/2],
+		
+		drawBehindParent: true
 	});
 	this.rightFrontWheelObj = new GameObject({
 		shape: wheelShape,
-		position: [this.bckWheelDst, -this.width/2]
+		shapeColor: "#111",
+		position: [this.bckWheelDst, -this.width/2],
+		
+		drawBehindParent: true
 	});
 	
 	this.addChildren(this.leftBackWheelObj, this.rightBackWheelObj, this.leftFrontWheelObj, this.rightFrontWheelObj);
@@ -413,7 +442,13 @@ Vehicle.prototype = mixin(GameObject.prototype, {
 	},
 	
 	actionGaz: function(f, dt) {
-		this.engineForce = lerp(f * this.enginePower * dt, this.engineForce, this.enginePing);
+		this.engineForce = lerp(f, this.engineForce, this.enginePing * (dt / 1000));
+	},
+	
+	actionBrake: function(f, dt) {
+		this.speed = lerp(this.speed, 0, this.brakeForce * clamp(f, 0, 1) * (dt / 1000));
+		
+		if(this.speed < 0.01) this.speed = 0;
 	},
 	
 	applyForces: (function() {
@@ -427,9 +462,10 @@ Vehicle.prototype = mixin(GameObject.prototype, {
 		return function(dt) {
 			this.getDirection(dir);
 			
-			this.engineForce = lerp(this.engineForce, 0, 0.1);
+			this.engineForce = lerp(this.engineForce, 0, this.enginePing / 8);
+			this.speed = lerp(this.speed, this.maxSpeed * this.engineForce, this.acceleration);
 			
-			posoffset.set(dir).mul(this.engineForce * (dt/1000));
+			posoffset.set(dir).mul(this.speed * (dt / 1000));
 			bckWheel.set(this.position).sub(dir.x * this.bckWheelDst, dir.y * this.bckWheelDst);
 			frtWheel.set(this.position).add(dir.x * this.frtWheelDst, dir.y * this.frtWheelDst);
 			
@@ -473,7 +509,7 @@ window.addEventListener('load', function() {
 	var cw = 0;
 	var ch = 0;
 	
-	var meterSize = 1/100;
+	var meterSize = 1/70;
 	
 	var scene = new GameObject();
 	var bus = new Vehicle();
@@ -508,6 +544,10 @@ window.addEventListener('load', function() {
 			bus.actionOrientWheels(-1, delta);
 		}
 		
+		if(TLS.isKeyDown(TLS.keyCodes.spacebar)) {
+			bus.actionBrake(1, delta);
+		}
+		
 		bus.applyForces(delta);
 		
 		render();
@@ -518,6 +558,27 @@ window.addEventListener('load', function() {
 	
 	var render = (function() {
 		// Funcs
+		function renderBackground(sizeX, sizeY) {
+			var sx = Math.floor(-sizeX);
+			var sy = Math.floor(-sizeY);
+			var ex = Math.ceil(sizeX);
+			var ey = Math.ceil(sizeY);
+			
+			gtx.save();
+				gtx.fillStyle = "#aaa";
+				gtx.fillRect(sx, sy, ex - sx, ey - sy);
+				
+				gtx.beginPath();
+				gtx.fillStyle = "#ddd";
+				for(var x = sx; x < ex; x+=2) {
+					for(var y = sy; y < ey; y++) {
+						gtx.rect((y % 2 === 0 ? x : x + 1), y, 1, 1);
+					}
+				}
+				gtx.fill();
+			gtx.restore();
+		}
+		
 		function renderGObject(go) {
 			if(!go.visible) return;
 			
@@ -527,7 +588,15 @@ window.addEventListener('load', function() {
 				
 				gtx.globalAlpha = go.opacity;
 				
-				gtx.fillStyle = "white";
+				for(var i = 0; i < go.children.length; i++) {
+					if(!go.children[i].visible || !go.children[i].drawBehindParent) continue;
+					
+					renderGObject(go.children[i]);
+				}
+				
+				gtx.fillStyle = go.shapeColor;
+				gtx.strokeStyle = go.shapeLineColor;
+				gtx.lineWidth = go.shapeLineWidth;
 				
 				if(go.sprite) {
 					if(go.sprite.img) {
@@ -535,31 +604,66 @@ window.addEventListener('load', function() {
 					}
 				} else if(go.shape && go.shape.vertices.length >= 6) {
 					gtx.beginPath();
+					
 					gtx.moveTo(go.shape.vertices[0], go.shape.vertices[1]);
 					for(var i = 2; i < go.shape.vertices.length; i += 2) {
 						gtx.lineTo(go.shape.vertices[i], go.shape.vertices[i + 1]);
 					}
-					gtx.fill();
+					
+					gtx.closePath();
+					
+					if(go.shapeFill) gtx.fill();
+					if(go.shapeOutline) gtx.stroke();
 				}
 				
 				for(var i = 0; i < go.children.length; i++) {
-					if(!go.children[i].visible) continue;
+					if(!go.children[i].visible || go.children[i].drawBehindParent) continue;
 					
 					renderGObject(go.children[i]);
 				}
 			gtx.restore();
 		}
 		
+		function renderCounter(x, y, s, a) {
+			gtx.beginPath();
+			gtx.moveTo(x, y);
+			gtx.arc(x + s/2, y, s/2, Math.PI, NATH.PI2);
+			gtx.closePath();
+			gtx.fill();
+			gtx.stroke();
+			
+			gtx.beginPath();
+			gtx.moveTo(x + s/2, y);
+			gtx.lineTo(x + s/2 + Math.cos(Math.PI + 0.02 * Math.PI + a * Math.PI * 0.96) * s * 0.45, y + Math.sin(Math.PI + 0.02 * Math.PI + a * Math.PI * 0.96) * s * 0.45);
+			gtx.stroke();
+		}
+		
+		function renderHUD() {
+			gtx.save();
+				gtx.strokeStyle = "black";
+				gtx.fillStyle = "white";
+				
+				renderCounter(10, cvs.height - 10, 200, Math.abs(bus.engineForce));
+				renderCounter(cvs.width - 210, cvs.height - 10, 200, Math.abs(bus.speed / bus.maxSpeed));
+			gtx.restore();
+		}
+		
 		return function() {
 			gtx.clearRect(0, 0, cvs.width, cvs.height);
+			gtx.fillStyle = "gray";
+			gtx.fillRect(0, 0, cvs.width, cvs.height);
 			
 			gtx.save();
 				gtx.translate(cvs.width/2, cvs.height/2);
-				gtx.scale(csize, -csize);
-				gtx.scale(meterSize, meterSize);
+				gtx.scale(csize * meterSize, -csize * meterSize);
 				
+				gtx.translate(-bus.position.x, -bus.position.y);
+				renderBackground(20, 20);
 				renderGObject(scene);
+				gtx.translate(bus.position.x, bus.position.y);
 			gtx.restore();
+			
+			renderHUD();
 		}
 	})();
 	
