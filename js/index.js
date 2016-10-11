@@ -457,7 +457,7 @@ Vehicle.prototype = mixin(GameObject.prototype, {
 		this.speed = NATH.lerp(this.speed, 0, this.brakeForce * NATH.clamp(f, 0, 1) * (dt / 1000));
 		this.engineForce = NATH.lerp(this.engineForce, 0, this.enginePing * (dt / 1000));
 		
-		if(this.speed < 0.1) this.speed = 0;
+		if(Math.abs(this.speed) < 0.1) this.speed = 0;
 		if(this.engineForce < 1/500) this.engineForce = 0;
 	},
 	
@@ -521,7 +521,7 @@ window.addEventListener('load', function() {
 	var cw = 0;
 	var ch = 0;
 	
-	var meterSize = 1/70;
+	var meterSize = 1/50;
 	
 	var scene = new GameObject();
 	var bus = new Vehicle();
