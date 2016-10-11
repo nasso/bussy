@@ -395,7 +395,7 @@ function Vehicle(opts) {
 	
 	this.acceleration = isNullOrUndef(opts.acceleration) ? 1/700 : opts.acceleration;
 	this.speed = 0;
-	this.maxSpeed = isNullOrUndef(opts.maxSpeed) ? 20 : opts.maxSpeed;
+	this.maxSpeed = isNullOrUndef(opts.maxSpeed) ? 27.8 : opts.maxSpeed;
 	
 	this.shape = new NATH.Rect2(this.length, this.width);
 	this.shapeColor = "#ddd";
@@ -763,6 +763,10 @@ window.addEventListener('load', function() {
 				
 				renderCounter(10, cvs.height - 10, 200, Math.abs(bus.engineForce));
 				renderCounter(cvs.width - 210, cvs.height - 10, 200, Math.abs(bus.speed / bus.maxSpeed));
+				
+				gtx.font = "normal 40px Sans-Serif";
+				gtx.textAlign = "right";
+				gtx.fillText(Math.round(NATH.mps2kmh(bus.speed)) + "km/h", cvs.width - 10, cvs.height - 130);
 			gtx.restore();
 		}
 		

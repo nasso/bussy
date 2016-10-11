@@ -7,6 +7,7 @@ NATH.toRadians = function(d) { return d * Math.PI / 180; };
 NATH.clamp = function(x, a, b) { return Math.max(Math.min(x, b), a); };
 NATH.lerp = function(a, b, x) { return a + NATH.clamp(x, 0, 1) * (b - a); };
 NATH.fRandom = function(s) { return typeof NATH.FRANDOM_TABLE[s] === 'number' ? NATH.FRANDOM_TABLE[s] : (NATH.FRANDOM_TABLE[s] = Math.random()); };
+NATH.mps2kmh = function(mps) { return mps * 3.6; }; // meter per second to km/h
 
 NATH.Vec2 = function(x, y) {
 	this.set(x, y);
