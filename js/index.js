@@ -165,6 +165,17 @@ var TLS = {
 		'toggleTouchpad': 255
 	},
 	
+	gamepads: (function() {
+		var gpl = [];
+		
+		window.addEventListener('gamepadconnected', function(e) {
+			console.log('Gamepad connected: '+e.gamepad.id);
+			gpl.push(e.gamepad);
+		});
+		
+		return gpl;
+	})(),
+	
 	isKeyDown: (function() {
 		var status = [];
 		
@@ -246,10 +257,6 @@ function mixin(a, b) {
 	return m;
 }
 
-function lerp(a, b, x) {
-	return a + x * (b - a);
-}
-
 function prettyTime(s) {
 	s = s || 0;
 	
@@ -298,10 +305,6 @@ function Enumeration(vals) {
 	for(var i = 0; i < vals.length; i++) {
 		this[vals[i]] = new EnumerationValue(this, vals[i]);
 	}
-}
-
-function clamp(x, a, b) {
-	return Math.max(Math.min(x, b), a);
 }
 
 // ----- CLASSES -----
@@ -382,11 +385,11 @@ function Vehicle(opts) {
 	this.length = isNullOrUndef(opts.length) ? 12 : opts.length;
 	this.width = isNullOrUndef(opts.width) ? 2.5 : opts.width;
 	
-	this.wheelConeAngle = isNullOrUndef(opts.wheelConeAngle) ? 80 : opts.wheelConeAngle;
-	this.wheelOrientSpeed = isNullOrUndef(opts.wheelOrientSpeed) ? 0.05 : opts.wheelOrientSpeed;
+	this.wheelConeAngle = isNullOrUndef(opts.wheelConeAngle) ? 85 : opts.wheelConeAngle;
+	this.wheelOrientSpeed = isNullOrUndef(opts.wheelOrientSpeed) ? 1/700 : opts.wheelOrientSpeed;
 	this.wheelOrientation = isNullOrUndef(opts.wheelOrientation) ? 0 : opts.wheelOrientation;
 	this.engineForce = isNullOrUndef(opts.engineForce) ? 0 : opts.engineForce;
-	this.enginePing = isNullOrUndef(opts.enginePing) ? 0.9 : opts.enginePing;
+	this.enginePing = isNullOrUndef(opts.enginePing) ? 2 : opts.enginePing;
 	
 	this.brakeForce = isNullOrUndef(opts.brakeForce) ? 0.9 : opts.brakeForce;
 	
@@ -430,25 +433,32 @@ function Vehicle(opts) {
 		drawBehindParent: true
 	});
 	
+	// True when "actionGaz" has been called since the last forces apply.
+	this.hasGazzed = false;
+	
 	this.addChildren(this.leftBackWheelObj, this.rightBackWheelObj, this.leftFrontWheelObj, this.rightFrontWheelObj);
 }
 
 Vehicle.prototype = mixin(GameObject.prototype, {
 	actionOrientWheels: function(side, dt) {
-		this.wheelOrientation += this.wheelOrientSpeed * (side > 0 ? 1 : -1) * dt;
-		this.wheelOrientation = clamp(this.wheelOrientation, -this.wheelConeAngle/2, this.wheelConeAngle/2);
+		this.wheelOrientation += ((side * this.wheelConeAngle/2) - this.wheelOrientation) * this.wheelOrientSpeed * dt;
+		this.wheelOrientation = NATH.clamp(this.wheelOrientation, -this.wheelConeAngle/2, this.wheelConeAngle/2);
 		
 		this.leftFrontWheelObj.orientation = this.rightFrontWheelObj.orientation = this.wheelOrientation;
 	},
 	
 	actionGaz: function(f, dt) {
-		this.engineForce = lerp(f, this.engineForce, this.enginePing * (dt / 1000));
+		this.engineForce = NATH.lerp(this.engineForce, f, this.enginePing * (dt / 1000));
+		
+		this.hasGazzed = true;
 	},
 	
 	actionBrake: function(f, dt) {
-		this.speed = lerp(this.speed, 0, this.brakeForce * clamp(f, 0, 1) * (dt / 1000));
+		this.speed = NATH.lerp(this.speed, 0, this.brakeForce * NATH.clamp(f, 0, 1) * (dt / 1000));
+		this.engineForce = NATH.lerp(this.engineForce, 0, this.enginePing * (dt / 1000));
 		
-		if(this.speed < 0.01) this.speed = 0;
+		if(this.speed < 0.1) this.speed = 0;
+		if(this.engineForce < 1/500) this.engineForce = 0;
 	},
 	
 	applyForces: (function() {
@@ -462,8 +472,8 @@ Vehicle.prototype = mixin(GameObject.prototype, {
 		return function(dt) {
 			this.getDirection(dir);
 			
-			this.engineForce = lerp(this.engineForce, 0, this.enginePing / 8);
-			this.speed = lerp(this.speed, this.maxSpeed * this.engineForce, this.acceleration);
+			if(!this.hasGazzed) this.engineForce = NATH.lerp(this.engineForce, 0, this.enginePing / 8 * (dt / 1000));
+			this.speed = NATH.lerp(this.speed, this.maxSpeed * this.engineForce, this.acceleration);
 			
 			posoffset.set(dir).mul(this.speed * (dt / 1000));
 			bckWheel.set(this.position).sub(dir.x * this.bckWheelDst, dir.y * this.bckWheelDst);
@@ -474,6 +484,8 @@ Vehicle.prototype = mixin(GameObject.prototype, {
 			
 			this.orientation = NATH.toDegrees(bckWheel.vectorTo(frtWheel).angle());
 			this.position.set(bckWheel.add(frtWheel).div(2));
+			
+			this.hasGazzed = false;
 		}
 	})(),
 	
@@ -514,6 +526,8 @@ window.addEventListener('load', function() {
 	var scene = new GameObject();
 	var bus = new Vehicle();
 	
+	var pad = null;
+
 	function loop() {
 		thisFrameTime = Date.now();
 		delta = thisFrameTime - lastFrameTime;
@@ -528,24 +542,18 @@ window.addEventListener('load', function() {
 			ch = cvs.height / csize;
 		}
 		
-		if(TLS.isKeyDown(TLS.keyCodes.up)) {
-			bus.actionGaz(1, delta);
-		}
-		
-		if(TLS.isKeyDown(TLS.keyCodes.down)) {
-			bus.actionGaz(-1, delta);
-		}
-		
-		if(TLS.isKeyDown(TLS.keyCodes.left)) {
-			bus.actionOrientWheels(1, delta);
-		}
-		
-		if(TLS.isKeyDown(TLS.keyCodes.right)) {
-			bus.actionOrientWheels(-1, delta);
-		}
-		
-		if(TLS.isKeyDown(TLS.keyCodes.spacebar)) {
-			bus.actionBrake(1, delta);
+		pad = TLS.gamepads[0];
+		if(pad && pad.id === 'xinput') { // Microsoft Xbox 360 controller
+			if(pad.buttons[7].pressed) bus.actionGaz(pad.buttons[7].value, delta);
+			if(pad.buttons[6].pressed) bus.actionGaz(-pad.buttons[6].value, delta);
+			bus.actionOrientWheels(-pad.axes[0], delta);
+			if(pad.buttons[1].pressed) bus.actionBrake(1, delta);
+		} else {
+			if(TLS.isKeyDown(TLS.keyCodes.up)) bus.actionGaz(1, delta);
+			if(TLS.isKeyDown(TLS.keyCodes.down)) bus.actionGaz(-1, delta);
+			if(TLS.isKeyDown(TLS.keyCodes.left)) bus.actionOrientWheels(1, delta);
+			if(TLS.isKeyDown(TLS.keyCodes.right)) bus.actionOrientWheels(-1, delta);
+			if(TLS.isKeyDown(TLS.keyCodes.spacebar)) bus.actionBrake(1, delta);
 		}
 		
 		bus.applyForces(delta);
@@ -558,24 +566,135 @@ window.addEventListener('load', function() {
 	
 	var render = (function() {
 		// Funcs
-		function renderBackground(sizeX, sizeY) {
+		
+		/*
+			This renders a 100x100 city tile at position (x,y)
+			It includes building(s) at the bottom left and roads
+			at the top and right.
+			By sticking tiles together, a city is obtained.
+			
+			Code by Antoine: https://github.com/antoineMoPa
+		*/
+		function renderTile(x, y){
+			// Building & sidewalk are at the bottom left of the tile
+
+            // Turning radi
+			var r = 3;
+
+			gtx.save();
+			gtx.translate(x, y);
+			
+			// Sidewalk
+			gtx.fillStyle = "#eee";
+			gtx.strokeStyle = "#444";
+			gtx.lineWidth = 0.1;
+			gtx.beginPath();
+				gtx.roundRect(0,0,80,80,r);
+				// Remove inner Rectangle
+				// To avoid filling uselessly
+				gtx.moveTo(3,3);
+				gtx.lineTo(3,77);
+				gtx.lineTo(77,77);
+				gtx.lineTo(77,3);
+			gtx.fill();
+			gtx.stroke();
+			
+			gtx.fillStyle = "#aaa";
+			gtx.lineWidth = 0.5;
+			gtx.strokeStyle = "#777";
+			gtx.beginPath();
+				gtx.roundRect(2,2,76,76,1);
+			gtx.fill();
+			gtx.stroke();
+			
+			// Yellow road lines
+			gtx.strokeStyle = "#fa1";
+			gtx.lineWidth = 0.2;
+			gtx.beginPath();
+				gtx.moveTo(89.8,0);
+				gtx.lineTo(89.8,80);
+				gtx.moveTo(90.2,0);
+				gtx.lineTo(90.2,80);
+
+				gtx.moveTo(0,	89.8);
+				gtx.lineTo(80,89.8);
+				gtx.moveTo(0,	90.2);
+				gtx.lineTo(80,90.2);
+			gtx.stroke();
+			
+			// White road stop lines
+			gtx.strokeStyle = "#eee";
+			gtx.lineWidth = 0.8;
+			gtx.beginPath();
+				// Top road, coming from left
+				gtx.moveTo(79.5,89.6);
+				gtx.lineTo(79.5,80.2);
+				// Right road, comming from bottom
+				gtx.moveTo(90.6,79.5);
+				gtx.lineTo(99.8,79.5);
+				// Leaving to the bottom
+				gtx.moveTo(80.2,0.5);
+				gtx.lineTo(89.5,0.5);
+				// Leaving through the left
+				gtx.moveTo(0.5,90.5);
+				gtx.lineTo(0.5,99.8);
+			gtx.stroke();
+			
+			// White road dotted lines
+			gtx.strokeStyle = "#eee";
+			gtx.lineWidth = 0.2;
+			gtx.save();
+					gtx.setLineDash([2, 6]);
+					gtx.beginPath();
+					// Top
+					gtx.moveTo(0,86.5);
+					gtx.lineTo(78,86.5);
+					gtx.moveTo(3,93.5);
+					gtx.lineTo(80,93.5);
+					// Right
+					gtx.moveTo(86.5,80);
+					gtx.lineTo(86.5,3);
+					gtx.moveTo(93.5,78);
+					gtx.lineTo(93.5,3);
+				gtx.stroke();
+			gtx.restore();
+			
+			// Parking/bike lane
+			gtx.strokeStyle = "#eee";
+			gtx.lineWidth = 0.2;
+			gtx.save();
+					gtx.beginPath();
+					// Top
+					gtx.moveTo(3,83);
+					gtx.lineTo(78,83);
+					gtx.moveTo(3,97);
+					gtx.lineTo(77,97);
+					// Right
+					gtx.moveTo(83,77);
+					gtx.lineTo(83.5,3);
+					gtx.moveTo(97,78);
+					gtx.lineTo(97,3);
+				gtx.stroke();
+			gtx.restore();
+
+			gtx.restore();
+		}
+		
+		function renderBackground(sizeX, sizeY, busx, busy) {
 			var sx = Math.floor(-sizeX);
 			var sy = Math.floor(-sizeY);
 			var ex = Math.ceil(sizeX);
 			var ey = Math.ceil(sizeY);
 			
 			gtx.save();
-				gtx.fillStyle = "#aaa";
-				gtx.fillRect(sx, sy, ex - sx, ey - sy);
-				
-				gtx.beginPath();
-				gtx.fillStyle = "#ddd";
-				for(var x = sx; x < ex; x+=2) {
-					for(var y = sy; y < ey; y++) {
-						gtx.rect((y % 2 === 0 ? x : x + 1), y, 1, 1);
+				for(var i=-2; i < 2; i++) {
+					for(var j=-2; j < 2; j++) {
+						renderTile(
+							Math.round(busx/100)*100 + i*100 - busx,
+							Math.round(busy/100)*100 + j*100 - busy
+						);
 					}
 				}
-				gtx.fill();
 			gtx.restore();
 		}
 		
@@ -633,8 +752,8 @@ window.addEventListener('load', function() {
 			gtx.stroke();
 			
 			gtx.beginPath();
-			gtx.moveTo(x + s/2, y);
-			gtx.lineTo(x + s/2 + Math.cos(Math.PI + 0.02 * Math.PI + a * Math.PI * 0.96) * s * 0.45, y + Math.sin(Math.PI + 0.02 * Math.PI + a * Math.PI * 0.96) * s * 0.45);
+			gtx.moveTo(x + s/2, y - s/30);
+			gtx.lineTo(x + s/2 + Math.cos(Math.PI + a * Math.PI) * s * 0.45, y + Math.sin(Math.PI + a * Math.PI) * s * 0.45 - s/30);
 			gtx.stroke();
 		}
 		
@@ -657,8 +776,9 @@ window.addEventListener('load', function() {
 				gtx.translate(cvs.width/2, cvs.height/2);
 				gtx.scale(csize * meterSize, -csize * meterSize);
 				
+				renderBackground(1000, 1000, bus.position.x, bus.position.y);
+				
 				gtx.translate(-bus.position.x, -bus.position.y);
-				renderBackground(20, 20);
 				renderGObject(scene);
 				gtx.translate(bus.position.x, bus.position.y);
 			gtx.restore();

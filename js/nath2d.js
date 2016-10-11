@@ -3,6 +3,8 @@ var NATH = {};
 NATH.PI2 = Math.PI * 2;
 NATH.toDegrees = function(r) { return r * 180 / Math.PI; };
 NATH.toRadians = function(d) { return d * Math.PI / 180; };
+NATH.clamp = function(x, a, b) { return Math.max(Math.min(x, b), a); };
+NATH.lerp = function(a, b, x) { return a + NATH.clamp(x, 0, 1) * (b - a); };
 
 NATH.Vec2 = function(x, y) {
 	this.set(x, y);
