@@ -1,10 +1,12 @@
 var NATH = {};
 
+NATH.FRANDOM_TABLE = {};
 NATH.PI2 = Math.PI * 2;
 NATH.toDegrees = function(r) { return r * 180 / Math.PI; };
 NATH.toRadians = function(d) { return d * Math.PI / 180; };
 NATH.clamp = function(x, a, b) { return Math.max(Math.min(x, b), a); };
 NATH.lerp = function(a, b, x) { return a + NATH.clamp(x, 0, 1) * (b - a); };
+NATH.fRandom = function(s) { return typeof NATH.FRANDOM_TABLE[s] === 'number' ? NATH.FRANDOM_TABLE[s] : (NATH.FRANDOM_TABLE[s] = Math.random()); };
 
 NATH.Vec2 = function(x, y) {
 	this.set(x, y);

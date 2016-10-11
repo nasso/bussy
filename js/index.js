@@ -575,11 +575,11 @@ window.addEventListener('load', function() {
 			
 			Code by Antoine: https://github.com/antoineMoPa
 		*/
-		function renderTile(x, y){
+		function renderTile(x, y, hue){
 			// Building & sidewalk are at the bottom left of the tile
 
             // Turning radi
-			var r = 3;
+			var r = 2;
 
 			gtx.save();
 			gtx.translate(x, y);
@@ -599,9 +599,9 @@ window.addEventListener('load', function() {
 			gtx.fill();
 			gtx.stroke();
 			
-			gtx.fillStyle = "#aaa";
+			gtx.fillStyle = "hsl("+hue+", 80%, 70%)";
 			gtx.lineWidth = 0.5;
-			gtx.strokeStyle = "#777";
+			gtx.strokeStyle = "hsl("+hue+", 80%, 30%)";
 			gtx.beginPath();
 				gtx.roundRect(2,2,76,76,1);
 			gtx.fill();
@@ -680,18 +680,17 @@ window.addEventListener('load', function() {
 			gtx.restore();
 		}
 		
-		function renderBackground(sizeX, sizeY, busx, busy) {
-			var sx = Math.floor(-sizeX);
-			var sy = Math.floor(-sizeY);
-			var ex = Math.ceil(sizeX);
-			var ey = Math.ceil(sizeY);
-			
+		function renderBackground(busx, busy) {
 			gtx.save();
 				for(var i=-2; i < 2; i++) {
 					for(var j=-2; j < 2; j++) {
+						var wx = Math.round(busx/100)*100 + i*100;
+						var wy = Math.round(busy/100)*100 + j*100;
+						
 						renderTile(
 							Math.round(busx/100)*100 + i*100 - busx,
-							Math.round(busy/100)*100 + j*100 - busy
+							Math.round(busy/100)*100 + j*100 - busy,
+							NATH.fRandom(wx * 100000 + wy) * 360
 						);
 					}
 				}
@@ -776,7 +775,7 @@ window.addEventListener('load', function() {
 				gtx.translate(cvs.width/2, cvs.height/2);
 				gtx.scale(csize * meterSize, -csize * meterSize);
 				
-				renderBackground(1000, 1000, bus.position.x, bus.position.y);
+				renderBackground(bus.position.x, bus.position.y);
 				
 				gtx.translate(-bus.position.x, -bus.position.y);
 				renderGObject(scene);
